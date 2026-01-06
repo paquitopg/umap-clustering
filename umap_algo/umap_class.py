@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 # Utils
 from sklearn.decomposition import PCA
-from knn import exact_knn_all_points
+from .knn import exact_knn_all_points
 from scipy.optimize import root_scalar, curve_fit
 from sklearn.preprocessing import StandardScaler
 
@@ -257,10 +257,6 @@ class umap_mapping:
 
         # 5. init embedding
         Y = self.spectral_embedding(KNN_graph, weights)
-
-        plt.scatter(Y[:, 0], Y[:, 1], c=data.target)
-        plt.title("UMAP Embedding of Iris Dataset")
-        plt.show()
 
         # 6. optimisation
         Y = self.optimize(Y, KNN_graph, weights, n_epochs=n_epochs)
