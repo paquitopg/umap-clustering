@@ -5,20 +5,24 @@ import numpy as np
 # Plot
 import matplotlib.pyplot as plt
 
-# Data processing
+# Utils
 from sklearn.decomposition import PCA
 from knn import exact_knn_all_points
-
-# Utils
 from scipy.optimize import root_scalar, curve_fit
+from sklearn.preprocessing import StandardScaler
 
 class umap_mapping:
-    def __init__(self, n_neighbors=15, min_dist=0.1, metric='euclidean', KNN_method='exact', random_state=42):
+    def __init__(self, n_neighbors=15, n_components=2, min_dist=0.1, KNN_metric = 'euclidean', KNN_method='exact', random_state=42):
         self.n_neighbors = n_neighbors
+        self.n_components = n_components
         self.min_dist = min_dist
-        self.metric = metric
+        self.metric = KNN_metric
         self.KNN_method = KNN_method
         self.random_state = random_state
+
+        # Taking default values for a and b, replaced later by fitting
+        self.a = 1.9
+        self.b = 0.79
 
     def compute_KNN_graph(self, X): 
         """
@@ -48,8 +52,9 @@ class umap_mapping:
         ---------
         Inputs:
         KNN_graph: adjacency list of length n_samples, each element is a tuple (index in X, distance)
+
         Returns:
-        rho: array-like, shape (n_samples,) is the distance to the closest neighbor (non-zero) for each point
+        rho: array-like, shape (n_samples,) - the distance to the closest neighbor (non-zero) for each point
         sigma: array-like, shape (n_samples,)
         ---------
         """
@@ -74,7 +79,7 @@ class umap_mapping:
         ---------
         Inputs:
         KNN_graph: adjacency list of length n_samples, each element is a tuple (index in X, distance)
-        rho: array-like, shape (n_samples,) is the distance to the closest neighbor (non-zero) for each point
+        rho: array-like, shape (n_samples,) - the distance to the closest neighbor (non-zero) for each point
         sigma: array-like, shape (n_samples,)
 
         Returns:
@@ -114,36 +119,70 @@ class umap_mapping:
         return np.array(adjusted_weights)
 
 
-    def attractive_force(self, a, b, y_i, y_j, weight_ij): # See Part 3.2 https://arxiv.org/pdf/1802.03426
-        return (-2*a*b*np.linalg.norm(y_i - y_j)**(2 * b - 2))/(1 + np.linalg.norm(y_i - y_j) ** 2) * (y_i - y_j) * weight_ij
+    def attractive_force(self, y_i, y_j, weight_ij): # See Part 3.2 https://arxiv.org/pdf/1802.03426
+        return (-2*self.a*self.b*np.linalg.norm(y_i - y_j)**(2 * self.b - 2))/(1 + np.linalg.norm(y_i - y_j) ** 2) * (y_i - y_j) * weight_ij
 
     
-    def repulsive_force(self, a, b, y_i, y_j, weight_ij, epsilon=1e-3): #See Part 3.2 https://arxiv.org/pdf/1802.03426
-        return (2*b) / ( (epsilon + np.linalg.norm(y_i - y_j)**2)*(1 + a*np.linalg.norm(y_i - y_j)**(2*b))) * (1-weight_ij) * (y_i - y_j)
+    def repulsive_force(self, y_i, y_j, weight_ij, epsilon=1e-3): #See Part 3.2 https://arxiv.org/pdf/1802.03426
+        return (2*self.b) / ( (epsilon + np.linalg.norm(y_i - y_j)**2)*(1 + self.a*np.linalg.norm(y_i - y_j)**(2*self.b))) * (1-weight_ij) * (y_i - y_j)
     
-    def find_ab_params(self, spread=1.0): # Need to be reviewed and fact-checked
+    def find_ab_params(self, KNN_graph):
+        """
+        Fit the parameters a and b for the UMAP attractive and repulsive forces by 
+        non-linear least squares fitting against the curve.
+        (see Definition 11 and equation (17) of appendix C of the UMAP paper https://arxiv.org/pdf/1802.03426)
+
+        ---------
+        Inputs:
+        KNN_graph: adjacency list of length n_samples, each element is a tuple (index in X, distance)
+
+        Returns:
+        a, b: float - parameters for the attractive and repulsive forces
+        --------- 
+        """
         def curve(d, a, b):
-            return 1.0 / (1.0 + a * d ** (2 * b))
+            return 1 / (1 + a * d ** (2 * b))
 
-        d = np.linspace(0, spread * 3, 300)
-        y = np.where(d <= self.min_dist, 1.0, np.exp(-(d - self.min_dist)))
+        d = np.array([x[1] for x in KNN_graph]).flatten()  # distances to neighbors
+        psi = np.where(d <= self.min_dist, 1.0, np.exp(-(d - self.min_dist)))
+        
+        (a, b), _ = curve_fit(curve, d, psi)
 
-        (a, b), _ = curve_fit(curve, d, y)
         return a, b
-    
-    def init_embedding(self, n_samples, n_components=2):
+
+
+    def PCA_embedding(self, X):
+        return PCA(n_components=self.n_components, random_state=self.random_state).fit_transform(X)
+
+    def random_embedding(self, n_samples):
         np.random.seed(self.random_state)
-        return np.random.randn(n_samples, n_components)
+        return np.random.randn(n_samples, self.n_components)
+
+    def spectral_embedding(self, KNN_graph, weights):
+        n_samples = len(KNN_graph)
+        A = np.zeros((n_samples, n_samples))
+
+        for i in range(n_samples):
+            neighbors = KNN_graph[i][0]
+            for idx, j in enumerate(neighbors):
+                A[i, j] = weights[i][idx]
+
+        D = np.diag(A.sum(axis=1))
+        L = D**0.5 @ (D - A) @ D**0.5
+
+        eigvals, eigvecs = np.linalg.eigh(L)
+
+        return eigvecs[:, 1:self.n_components+1]
 
 
-    def optimize(self, Y, KNN_graph, weights, a, b, n_epochs=200, learning_rate=1.0):
+    def optimize(self, Y, KNN_graph, weights, n_epochs=200, learning_rate=1):
         """
         Optimize the low-dimensional embedding Y using stochastic gradient descent.
 
         ---------
         Inputs:
         Y: array-like, shape (n_samples, n_components) - initial embedding
-        KNN_graph: adjacency list of length n_samples, each element is a tuple (index in X, distance)
+        KNN_graph: adjacency list of length n_samples, each element is a tuple (indexes in X, distances)
         weights: array-like, shape (n_samples, n_neighbors) - adjusted weights
         a, b: float - parameters for the attractive and repulsive forces
         n_epochs: int - number of epochs for optimization
@@ -155,6 +194,7 @@ class umap_mapping:
         """
 
         n_samples = Y.shape[0]
+        n_neg = 5
 
         for epoch in range(n_epochs):
             for i in range(n_samples):
@@ -164,34 +204,39 @@ class umap_mapping:
 
                     w_ij = weights[i][idx]
 
-                    # force attractive
-                    grad_attr = self.attractive_force(
-                        a, b, Y[i], Y[j], w_ij
-                    )
+                    if np.random.rand() > w_ij:
+                        continue
 
-                    # force répulsive
-                    grad_rep = self.repulsive_force(
-                        a, b, Y[i], Y[j], w_ij
-                    )
+                    grad_attr = self.attractive_force(Y[i], Y[j], w_ij)
 
-                    grad = grad_attr + grad_rep
+                    Y[i] += learning_rate * grad_attr
 
-                    Y[i] += learning_rate * grad
-                    Y[j] -= learning_rate * grad
+                for _ in range(n_neg):
+                    k = np.random.randint(0, n_samples)
+                    if k == i:
+                        continue
+                    
+                    # Search if k is in the neighbors of i
+                    w_ik = 0.0
+                    if k in KNN_graph[i][0]:
+                        idx_k = np.where(KNN_graph[i][0] == k)[0][0]
+                        w_ik = weights[i][idx_k]
 
-            # décroissance du LR (classique)
-            learning_rate *= 0.99
+                    grad_rep = self.repulsive_force(Y[i], Y[k], w_ik)
+                    Y[i] += learning_rate * grad_rep
+
+
+            learning_rate -= epoch / n_epochs * learning_rate
 
         return Y
-    
-    def fit_transform(self, X, n_components=2, n_epochs=200):
+
+    def fit_transform(self, X, n_epochs=200):
         """
         Fit the UMAP model to the data X and transform it into a low-dimensional embedding.
 
         ---------
         Inputs:
         X: array-like, shape (n_samples, n_features)
-        n_components: int - number of dimensions for the embedding
         n_epochs: int - number of epochs for optimization
 
         Returns:
@@ -199,25 +244,26 @@ class umap_mapping:
         ---------
         """
         # 1. KNN
-        KNN = self.compute_KNN_graph(X)
+        KNN_graph = self.compute_KNN_graph(X)
 
         # 2. rho & sigma
-        rho, sigma = self.rho_sigma(KNN)
+        rho, sigma = self.rho_sigma(KNN_graph)
 
         # 3. poids symétrisés
-        weights = self.compute_adjusted_weights(KNN, rho, sigma)
+        weights = self.compute_adjusted_weights(KNN_graph, rho, sigma)
 
         # 4. paramètres a, b
-        a, b = self.find_ab_params(self.min_dist)
+        self.a, self.b = self.find_ab_params(KNN_graph)
 
         # 5. init embedding
-        Y = self.init_embedding(len(X), n_components)
+        Y = self.spectral_embedding(KNN_graph, weights)
+
+        plt.scatter(Y[:, 0], Y[:, 1], c=data.target)
+        plt.title("UMAP Embedding of Iris Dataset")
+        plt.show()
 
         # 6. optimisation
-        Y = self.optimize(
-            Y, KNN, weights, a, b,
-            n_epochs=n_epochs
-        )
+        Y = self.optimize(Y, KNN_graph, weights, n_epochs=n_epochs)
 
         return Y
 
@@ -227,9 +273,11 @@ if __name__ == "__main__":
 
     data = load_iris()
     X = data.data
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
 
-    umap = umap_mapping(n_neighbors=10, min_dist=0.1, random_state=42)
-    Y = umap.fit_transform(X, n_components=2, n_epochs=500)
+    umap = umap_mapping(n_neighbors=10, n_components=2, min_dist=0.1, random_state=42)
+    Y = umap.fit_transform(X, n_epochs=500)
 
     plt.scatter(Y[:, 0], Y[:, 1], c=data.target)
     plt.title("UMAP Embedding of Iris Dataset")
