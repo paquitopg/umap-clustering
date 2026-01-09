@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 # Utils
 from sklearn.decomposition import PCA
-from .knn import exact_knn_all_points
+from knn import exact_knn_all_points
 from scipy.optimize import root_scalar, curve_fit
 from sklearn.preprocessing import StandardScaler
 
@@ -120,7 +120,7 @@ class umap_mapping:
 
 
     def attractive_force(self, y_i, y_j, weight_ij): # See Part 3.2 https://arxiv.org/pdf/1802.03426
-        return (-2*self.a*self.b*np.linalg.norm(y_i - y_j)**(2 * self.b - 2))/(1 + np.linalg.norm(y_i - y_j) ** 2) * (y_i - y_j) * weight_ij
+        return (-2*self.a*self.b*np.linalg.norm(y_i - y_j)**(2 * self.b - 2))/(1 + self.a*np.linalg.norm(y_i - y_j)**(2*self.b)) * (y_i - y_j) * weight_ij
 
     
     def repulsive_force(self, y_i, y_j, weight_ij, epsilon=1e-3): #See Part 3.2 https://arxiv.org/pdf/1802.03426
@@ -159,6 +159,7 @@ class umap_mapping:
         return np.random.randn(n_samples, self.n_components)
 
     def spectral_embedding(self, KNN_graph, weights):
+        # TODO : correct this function (more like a projection than a 2D embedding)
         n_samples = len(KNN_graph)
         A = np.zeros((n_samples, n_samples))
 
@@ -168,14 +169,16 @@ class umap_mapping:
                 A[i, j] = weights[i][idx]
 
         D = np.diag(A.sum(axis=1))
-        L = D**0.5 @ (D - A) @ D**0.5
+        D_inv_sqrt = np.diag(1/np.sqrt(A.sum(axis=1)))
+
+        L = D_inv_sqrt @ (D - A) @ D_inv_sqrt
 
         eigvals, eigvecs = np.linalg.eigh(L)
 
         return eigvecs[:, 1:self.n_components+1]
 
 
-    def optimize(self, Y, KNN_graph, weights, n_epochs=200, learning_rate=1):
+    def optimize(self, Y, KNN_graph, weights, n_epochs=200, learning_rate=0.01):
         """
         Optimize the low-dimensional embedding Y using stochastic gradient descent.
 
@@ -208,6 +211,7 @@ class umap_mapping:
                         continue
 
                     grad_attr = self.attractive_force(Y[i], Y[j], w_ij)
+                    # print("attr", Y[i], Y[j], w_ij, grad_attr)
 
                     Y[i] += learning_rate * grad_attr
 
@@ -223,10 +227,12 @@ class umap_mapping:
                         w_ik = weights[i][idx_k]
 
                     grad_rep = self.repulsive_force(Y[i], Y[k], w_ik)
+                    # print("rep", Y[i], Y[k], w_ik, grad_rep)
+
                     Y[i] += learning_rate * grad_rep
 
 
-            learning_rate -= epoch / n_epochs * learning_rate
+            learning_rate -= 1 / n_epochs * learning_rate
 
         return Y
 
@@ -257,6 +263,10 @@ class umap_mapping:
 
         # 5. init embedding
         Y = self.spectral_embedding(KNN_graph, weights)
+
+        plt.scatter(Y[:, 0], Y[:, 1], c=data.target)
+        plt.title("UMAP Embedding of Iris Dataset")
+        plt.show()
 
         # 6. optimisation
         Y = self.optimize(Y, KNN_graph, weights, n_epochs=n_epochs)
