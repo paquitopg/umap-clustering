@@ -7,12 +7,18 @@ authors = [
 ]
 license = {text = "MIT"}
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
-    "umap-learn (>=0.5.11,<0.6.0)"
+    "umap-learn (>=0.5.11)",
+    "scikit-learn (>=1.8.0)",
+    "scipy (>=1.17.0)",
+    "pandas (>=2.3.3)",
+    "seaborn (>=0.13.2,<0.14.0)",
+    "matplotlib (>=3.10.8,<4.0.0)",
+    "numpy (<=2.3)"
 ]
 
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
+requires = ["poetry-core>=2.0.0"]
 build-backend = "poetry.core.masonry.api"
