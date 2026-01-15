@@ -8,4 +8,6 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-data/
+
+# macOS
+.DS_Store
