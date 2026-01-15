@@ -1,75 +1,97 @@
 import time
 import numpy as np
-import pandas as pd
+import time
+import numpy as np
 import matplotlib.pyplot as plt
+import umap
+from sklearn.datasets import fetch_covtype
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
-import umap
+from sklearn.metrics import silhouette_score
+from sklearn.utils import resample
 
-#TEST
 
-#SIZES = [5000, 20000, 50000, 100000, 500000] # Full scale
-SIZES = [1000, 5000, 10000] # Small scale for testing
-TIMEOUT = 300 # 5 minutes max per run
+print("Fetching Forest Covertype dataset (this may take a moment)...")
+covtype = fetch_covtype()
+X_full = covtype.data
+y_full = covtype.target
 
-# Load Data (Assuming data is loaded into X_full as before)
-# For testing without the file, we simulate:
-X_full = np.random.rand(100000, 5) 
+print(f"Dataset Loaded. Shape: {X_full.shape}")
+
+# We define increasing sizes to test the O(N) complexity
+sizes = [5000, 10000, 50000, 100000] # Stopped at 100k for t-SNE safety. 
 
 results = {
-    'PCA': {'sizes': [], 'times': []},
-    't-SNE': {'sizes': [], 'times': []},
-    'UMAP (Lib)': {'sizes': [], 'times': []}
+    'PCA':   {'sizes': [], 'times': [], 'score': []},
+    't-SNE': {'sizes': [], 'times': [], 'score': []},
+    'UMAP':  {'sizes': [], 'times': [], 'score': []}
 }
 
-def run_with_timeout(algo_name, algo_func, X, sizes_list):
-    """Runs the algorithm for increasing sizes until it times out."""
-    print(f"\n--- Benchmarking {algo_name} ---")
-    for n in sizes_list:
-        if n > len(X): break
-        
-        X_sub = X[:n]
+for n in sizes:
+    print(f"\n--- Benchmarking N = {n} ---")
+    
+    # Stratified subsample to keep class balance
+    X_sub, y_sub = resample(X_full, y_full, n_samples=n, random_state=42, stratify=y_full)
+    
+    # PCA
+    start = time.time()
+    embedding_pca = PCA(n_components=2).fit_transform(X_sub)
+    pca_time = time.time() - start
+    results['PCA']['sizes'].append(n)
+    results['PCA']['times'].append(pca_time)
+    print(f"PCA:   {pca_time:.2f}s")
+    
+    # UMAP
+    start = time.time()
+    # n_jobs=-1 uses all cores. 
+    embedding_umap = umap.UMAP(n_neighbors=15, min_dist=0.1, n_jobs=-1).fit_transform(X_sub)
+    umap_time = time.time() - start
+    results['UMAP']['sizes'].append(n)
+    results['UMAP']['times'].append(umap_time)
+    print(f"UMAP:  {umap_time:.2f}s")
+    
+    # t-SNE
+    if n <= 50000:
         start = time.time()
-        
-        try:
-            algo_func(X_sub)
-            duration = time.time() - start
-            
-            print(f"Size {n}: {duration:.2f}s")
-            results[algo_name]['sizes'].append(n)
-            results[algo_name]['times'].append(duration)
-            
-            if duration > TIMEOUT:
-                print(f"-> Stopping {algo_name} (Time Limit Exceeded)")
-                break
-                
-        except Exception as e:
-            print(f"-> {algo_name} FAILED at N={n}: {e}")
-            break
+        embedding_tsne = TSNE(n_components=2, n_jobs=-1).fit_transform(X_sub)
+        tsne_time = time.time() - start
+        results['t-SNE']['sizes'].append(n)
+        results['t-SNE']['times'].append(tsne_time)
+        print(f"t-SNE: {tsne_time:.2f}s")
+    else:
+        print("t-SNE: Skipped (Too slow for this size)")
 
-# 1. Define Wrappers
-run_with_timeout('PCA', 
-                 lambda data: PCA(n_components=2).fit_transform(data), 
-                 X_full, SIZES)
+# Quality Check 
+print("\n--- Quality Sanity Check (Silhouette Score on N=50,000) ---")
+idx = np.random.choice(len(X_sub), 10000, replace=False)
 
-run_with_timeout('UMAP (Lib)', 
-                 lambda data: umap.UMAP(n_neighbors=15, n_jobs=-1).fit_transform(data), 
-                 X_full, SIZES)
+sil_pca = silhouette_score(embedding_pca[idx], y_sub[idx])
+sil_umap = silhouette_score(embedding_umap[idx], y_sub[idx])
+print(f"PCA Silhouette:  {sil_pca:.3f}")
+print(f"UMAP Silhouette: {sil_umap:.3f}")
 
-run_with_timeout('t-SNE', 
-                 lambda data: TSNE(n_components=2, n_jobs=-1).fit_transform(data), 
-                 X_full, SIZES)
+plt.figure(figsize=(12, 5))
 
-# 2. Plot
-plt.figure(figsize=(10, 6))
-for name, res in results.items():
-    if res['sizes']:
-        plt.plot(res['sizes'], res['times'], marker='o', label=name)
+# Plot 1: Scalability (Time)
+plt.subplot(1, 2, 1)
+plt.plot(results['PCA']['sizes'], results['PCA']['times'], 'o-', label='PCA')
+plt.plot(results['UMAP']['sizes'], results['UMAP']['times'], 'o-', label='UMAP')
+if results['t-SNE']['sizes']:
+    plt.plot(results['t-SNE']['sizes'], results['t-SNE']['times'], 'x--', label='t-SNE')
 
 plt.xlabel('Sample Size (N)')
-plt.ylabel('Time (Seconds)')
-plt.title('Scalability: NYC Taxi Dataset')
+plt.ylabel('Time (seconds)')
+plt.title('Computational Cost')
 plt.legend()
-plt.grid(True)
-plt.yscale('log')
-plt.savefig("Images/comp_perf.png")
+plt.yscale('log') # Log scale is crucial here
+plt.grid(True, alpha=0.3)
+
+# Plot 2: Visual Result
+plt.subplot(1, 2, 2)
+plt.scatter(embedding_umap[:, 0], embedding_umap[:, 1], c=y_sub, cmap='Spectral', s=0.1, alpha=0.5)
+plt.title(f'UMAP Visualization (N={n})')
+plt.axis('off')
+
+plt.tight_layout()
+plt.savefig("Images/performance_covtype.png")
+plt.show()
