@@ -6,8 +6,9 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 import umap
 
-# --- Configuration ---
-# SIZES = [5000, 20000, 50000, 100000, 500000] # Full scale
+#TEST
+
+#SIZES = [5000, 20000, 50000, 100000, 500000] # Full scale
 SIZES = [1000, 5000, 10000] # Small scale for testing
 TIMEOUT = 300 # 5 minutes max per run
 
@@ -70,5 +71,5 @@ plt.ylabel('Time (Seconds)')
 plt.title('Scalability: NYC Taxi Dataset')
 plt.legend()
 plt.grid(True)
-plt.yscale('log') # Log scale helps visualize huge differences!
-plt.show()
+plt.yscale('log')
+plt.savefig("Images/comp_perf.png")
