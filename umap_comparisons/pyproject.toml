@@ -1,0 +1,18 @@
+[project]
+name = "umap-comparisons"
+version = "0.1.0"
+description = "Poetry package to evaluate UMAP and compare the algo's performance to traditional DR methods"
+authors = [
+    {name = "paquitopg",email = "pacogoze@gmail.com"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "umap-learn (>=0.5.11,<0.6.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
