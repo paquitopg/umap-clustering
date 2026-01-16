@@ -1,18 +1,15 @@
 # Data Structure
-import pandas as pd
 import numpy as np
 import scipy.sparse as sp
 
 # Plot
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation, PillowWriter
+from matplotlib.animation import FuncAnimation
 
 # Utils
-from sklearn.decomposition import PCA
 from .knn import exact_knn_all_points
 from .nn_descent import approx_knn_all_points
 from scipy.optimize import root_scalar, curve_fit
-from sklearn.preprocessing import StandardScaler
 
 class umap_mapping:
     def __init__(self, n_neighbors=15, n_components=2, min_dist=0.1, KNN_metric = 'euclidean', KNN_method='exact'):
@@ -268,7 +265,12 @@ class umap_mapping:
                     if k == i:
                         continue
 
-                    grad = self.repulsive_force(yi, Y[k], 0.0)
+                    w_ik = 0.0
+                    if k in indices[row_start:row_end]:
+                        k_idx = np.where(indices[row_start:row_end] == k)[0][0] + row_start
+                        w_ik = data[k_idx]
+
+                    grad = self.repulsive_force(yi, Y[k], w_ik)
                     yi += learning_rate * grad
 
                 Y[i] = yi
