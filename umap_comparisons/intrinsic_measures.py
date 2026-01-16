@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.datasets import fetch_openml
 from sklearn.manifold import trustworthiness, TSNE
@@ -33,7 +34,8 @@ def compute_continuity(X, X_embedded, n_neighbors=5):
 
 print("Loading Data...")
 fashion = fetch_openml(name='Fashion-MNIST', version=1, parser='auto')
-X = fashion.data.iloc[:3000].values  # Smaller subset for expensive distance matrix calcs
+n_points = 10000  # Number of points used
+X = fashion.data.iloc[:n_points].values  # Smaller subset for expensive distance matrix calcs
 
 algorithms = {
     "PCA": PCA(n_components=2),
@@ -64,11 +66,12 @@ for name, algo in algorithms.items():
     print(f"Continuity:      {cont:.4f}  (Keeps neighbors together)")
     print("-" * 30)
     
-    # Store results
+    # Store results (Spearman Rho will be computed and added later)
     results[name] = {
         'embedding': X_emb,
         'trustworthiness': trust,
-        'continuity': cont
+        'continuity': cont,
+        'spearman_rho': None  # Will be computed during Shephard diagram generation
     }
 
 # Generate Shephard Diagrams for each method
@@ -98,6 +101,9 @@ for idx, (name, result) in enumerate(results.items()):
     # Compute Spearman correlation
     spearman_rho = spearmanr(high_vals, low_vals).correlation
     
+    # Store Spearman Rho in results
+    results[name]['spearman_rho'] = spearman_rho
+    
     # Subsample points for plot
     mask = np.random.choice(len(high_vals), n_pairs, replace=False)
     
@@ -112,22 +118,37 @@ plt.tight_layout()
 plt.savefig("Images/shephard_diagram.png")
 plt.show()
 
-# Print summary table
+# Create and save summary table
 print("\n" + "="*50)
 print("SUMMARY OF INTRINSIC MEASURES")
 print("="*50)
-print(f"{'Method':<10} {'Trustworthiness':<18} {'Continuity':<12} {'Spearman Rho':<15}")
-print("-" * 50)
+
+# Create DataFrame with results
+table_data = []
 for name, result in results.items():
-    # Compute Spearman for summary
-    indices_summary = np.random.choice(X.shape[0], 1000, replace=False)
-    X_sub_summary = X[indices_summary]
-    X_emb_sub_summary = result['embedding'][indices_summary]
-    dist_high_summary = pairwise_distances(X_sub_summary)
-    dist_low_summary = pairwise_distances(X_emb_sub_summary)
-    high_vals_summary = dist_high_summary[np.triu_indices_from(dist_high_summary, k=1)]
-    low_vals_summary = dist_low_summary[np.triu_indices_from(dist_low_summary, k=1)]
-    spearman_rho_summary = spearmanr(high_vals_summary, low_vals_summary).correlation
-    
-    print(f"{name:<10} {result['trustworthiness']:<18.4f} {result['continuity']:<12.4f} {spearman_rho_summary:<15.4f}")
+    table_data.append({
+        'Method': name,
+        'Number of Points': n_points,
+        'Trustworthiness': result['trustworthiness'],
+        'Continuity': result['continuity'],
+        'Spearman Rho': result['spearman_rho']
+    })
+
+df_results = pd.DataFrame(table_data)
+
+# Print formatted table
+print(df_results.to_string(index=False))
 print("="*50)
+
+# Also save as a nicely formatted text file
+txt_filename = f"images/intrinsic_measures_results_{n_points}.txt"
+with open(txt_filename, 'w') as f:
+    f.write("="*70 + "\n")
+    f.write("SUMMARY OF INTRINSIC MEASURES\n")
+    f.write("="*70 + "\n\n")
+    f.write(df_results.to_string(index=False))
+    f.write("\n\n" + "="*70 + "\n")
+    f.write(f"Dataset: Fashion-MNIST\n")
+    f.write(f"Number of points used: {n_points}\n")
+    f.write("="*70 + "\n")
+print(f"Formatted table saved to: {txt_filename}")

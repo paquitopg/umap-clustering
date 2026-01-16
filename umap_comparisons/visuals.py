@@ -10,7 +10,7 @@ import time
 print("Loading Fashion-MNIST...")
 
 fashion = fetch_openml(name='Fashion-MNIST', version=1, parser='auto')
-n_points = 10000
+n_points = 25000
 X = fashion.data.iloc[:n_points].values
 y = fashion.target.iloc[:n_points].astype(int).values
 target_names = fashion.target_names if hasattr(fashion, 'target_names') else [str(i) for i in range(10)]
@@ -45,5 +45,5 @@ for i, (name, algo) in enumerate(algorithms.items()):
 cbar = fig.colorbar(scatter, ax=axes, orientation='horizontal', fraction=0.05, pad=0.1)
 cbar.set_label('Digit Class')
 plt.suptitle(f"Qualitative Comparison: Fashion-MNIST Embeddings ({n_points} points)", fontsize=18)
-plt.savefig(f"Images/qualitative_comparison_{n_points}points.png")
+plt.savefig(f"images/qualitative_comparison_{n_points}points.png")
 plt.show()
