@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 # Utils
 from sklearn.decomposition import PCA
 from .knn import exact_knn_all_points
+from .nn_descent import approx_knn_all_points
 from scipy.optimize import root_scalar, curve_fit
 from sklearn.preprocessing import StandardScaler
 
@@ -40,6 +41,9 @@ class umap_mapping:
 
         if self.KNN_method == 'exact':
             indices, distances = exact_knn_all_points(X, k=K, metric=self.metric)
+            return [[indices[i], distances[i]] for i in range(len(X))]
+        else :
+            indices, distances = approx_knn_all_points(X, k=K, metric=self.metric)
             return [[indices[i], distances[i]] for i in range(len(X))]
         
 

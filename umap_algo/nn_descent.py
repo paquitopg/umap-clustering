@@ -4,6 +4,34 @@ similarity measures. In Proceedings of the 20th international conference on Worl
 
 import numpy as np
 import heapq 
+from scipy.spatial.distance import pdist, squareform
+
+def approx_knn_all_points(X, k, metric="euclidean"):
+    """
+    Calcule les k plus proches voisins approximés pour tous les points du dataset en utilisant NNDescent.
+
+    Parameters
+    ----------
+    X : ndarray (N, d)
+        Dataset
+    k : int
+        Nombre de voisins
+    metric : str
+        Distance (euclidean, manhattan, etc.)
+
+    Returns
+    -------
+    indices : ndarray (N, k)
+        Indices des k plus proches voisins
+    distances : ndarray (N, k)
+        Distances associées
+    """
+
+    distance_matrix = squareform(pdist(X, metric=metric))
+    sigma = -distance_matrix
+
+    return NNDescent(X, sigma, k)
+
 
 
 def NNDescent(V, sigma, K, max_iter=1000):
