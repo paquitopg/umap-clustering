@@ -4,8 +4,6 @@ import sys
 import os
 import time
 
-# Add the parent directory (project root) to the path to import umap_algo
-# File is in umap_comparisons/, so go up one level to reach root where umap_algo/ is
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
@@ -44,10 +42,10 @@ print(f"Using subset: {n_points} points (for faster testing)")
 print("\nInitializing UMAP implementations...")
 print("Parameters: n_neighbors=15, n_components=2, min_dist=0.1")
 
-# UMAP library
+# library
 umap_library = umap.UMAP(n_neighbors=15, min_dist=0.1, random_state=42)
 
-# Custom UMAP
+# Custom
 umap_custom = umap_mapping(
     n_neighbors=15,
     n_components=2,
@@ -56,25 +54,22 @@ umap_custom = umap_mapping(
     random_state=42
 )
 
-# Run UMAP library
 print("\nRunning UMAP library...")
 start_lib = time.time()
 embedding_lib = umap_library.fit_transform(X_scaled)
 duration_lib = time.time() - start_lib
 print(f"UMAP library completed in {duration_lib:.2f} seconds")
 
-# Run custom UMAP
 print("\nRunning custom UMAP implementation (this may take a while)...")
 start_custom = time.time()
 embedding_custom = umap_custom.fit_transform(X_scaled, n_epochs=200)
 duration_custom = time.time() - start_custom
 print(f"Custom UMAP completed in {duration_custom:.2f} seconds")
 
-# Visualize the results side by side
 print("\nGenerating visualization...")
 fig, axes = plt.subplots(1, 2, figsize=(20, 9))
 
-# Left plot: UMAP library
+# left
 ax1 = axes[0]
 scatter1 = ax1.scatter(
     embedding_lib[:, 0],
@@ -94,7 +89,7 @@ ax1.set_xlabel("UMAP Dimension 1", fontsize=12)
 ax1.set_ylabel("UMAP Dimension 2", fontsize=12)
 ax1.grid(True, alpha=0.3)
 
-# Right plot: Custom UMAP
+# right
 ax2 = axes[1]
 scatter2 = ax2.scatter(
     embedding_custom[:, 0],
@@ -114,7 +109,7 @@ ax2.set_xlabel("UMAP Dimension 1", fontsize=12)
 ax2.set_ylabel("UMAP Dimension 2", fontsize=12)
 ax2.grid(True, alpha=0.3)
 
-# Add overall title
+# title
 plt.suptitle(
     f"UMAP Comparison: Forest Cover Dataset ({len(X_scaled):,} points)",
     fontsize=16,
@@ -122,10 +117,10 @@ plt.suptitle(
     y=0.98
 )
 
-# Adjust layout to make room for colorbar
+# layout
 plt.tight_layout(rect=[0, 0.08, 1, 0.96])
 
-# Add a single colorbar for both plots (outside, below the plots)
+# colorbar
 cbar = fig.colorbar(scatter1, ax=axes, orientation='horizontal', 
                     fraction=0.05, pad=0.15, aspect=40)
 cbar.set_label('Forest Cover Type', fontsize=12, fontweight='bold')
@@ -138,7 +133,7 @@ print(f"\nVisualization saved to: {output_path}")
 
 plt.show()
 
-# Print summary statistics
+# summary
 print("\n" + "="*70)
 print("SUMMARY")
 print("="*70)
