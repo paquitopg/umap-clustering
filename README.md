@@ -19,7 +19,7 @@ Enables comparison of UMAP results with classical methods like PCA or t-SNE.
 ## 📦 Project Structure
 | Folder              | Description                                                             |
 | ------------------- | ----------------------------------------------------------------------- |
-| `data_exploration/` | Scripts and notebooks for inspecting datasets.                          |
+| `test/`             | Scripts and notebooks for inspecting datasets and testing algorithms.   |
 | `umap_algo/`        | Core UMAP implementation and embedding pipelines.                       |
 | `umap_comparisons/` | Comparisons between UMAP and other dimensionality reduction approaches. |
 
