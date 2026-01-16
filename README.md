@@ -1,4 +1,4 @@
-# UAMP-clustering
+# UMAP-clustering
 
 UMAP-Clustering is a project that applies Uniform Manifold Approximation and Projection (UMAP) — a modern non-linear dimensionality reduction algorithm — to real-world datasets and combines it with clustering techniques to uncover structure in high-dimensional data.
 
