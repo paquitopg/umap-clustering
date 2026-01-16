@@ -32,7 +32,7 @@ scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
 # Use a subset:
-n_points = 5000
+n_points = 3500
 indices = np.random.choice(len(X_scaled), n_points, replace=False)
 X_scaled = X_scaled[indices]
 y = y[indices]
@@ -50,8 +50,8 @@ umap_custom = umap_mapping(
     n_neighbors=15,
     n_components=2,
     min_dist=0.1,
-    KNN_method='approx',  # 'exact' or 'approx'
-    random_state=42
+    KNN_method='exact'  # 'exact' or 'approx'
+    # Note: random_state parameter is not available in umap_mapping
 )
 
 print("\nRunning UMAP library...")
