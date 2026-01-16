@@ -9,8 +9,8 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 
 # Utils
 from sklearn.decomposition import PCA
-from knn import exact_knn_all_points
-from nn_descent import approx_knn_all_points
+from .knn import exact_knn_all_points
+from .nn_descent import approx_knn_all_points
 from scipy.optimize import root_scalar, curve_fit
 from sklearn.preprocessing import StandardScaler
 
@@ -355,7 +355,7 @@ class umap_mapping:
         # 5. init embedding
         Y = self.spectral_embedding(weights)
 
-       if self.n_components == 2:
+        if self.n_components == 2:
             plt.scatter(Y[:, 0], Y[:, 1], c=labels)
             plt.title("Spectral Embedding of the Dataset")
             plt.show()
@@ -372,15 +372,3 @@ class umap_mapping:
                 plt.show()
 
         return Y
-
-if __name__ == "__main__":
-    # Example usage with Iris dataset
-    from sklearn.datasets import load_iris
-
-    data = load_iris()
-    X = data.data
-    scaler = StandardScaler()
-    X = scaler.fit_transform(X)
-
-    umap = umap_mapping(n_neighbors=10, n_components=2, min_dist=0.1)
-    Y = umap.fit_transform(X, n_epochs=300, animation=True, labels = data.target)
