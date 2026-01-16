@@ -32,7 +32,7 @@ scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
 # Use a subset:
-n_points = 2000
+n_points = 5000
 indices = np.random.choice(len(X_scaled), n_points, replace=False)
 X_scaled = X_scaled[indices]
 y = y[indices]
@@ -127,29 +127,4 @@ cbar.set_label('Forest Cover Type', fontsize=12, fontweight='bold')
 
 output_dir = "images"
 os.makedirs(output_dir, exist_ok=True)
-output_path = os.path.join(output_dir, "umap_comparison_forest_cover.png")
-plt.savefig(output_path, dpi=150, bbox_inches='tight')
-print(f"\nVisualization saved to: {output_path}")
-
-plt.show()
-
-# summary
-print("\n" + "="*70)
-print("SUMMARY")
-print("="*70)
-print(f"Dataset: Forest Cover Type")
-print(f"Original dimensions: {X.shape[1]}")
-print(f"Reduced dimensions: 2")
-print(f"Number of points: {len(X_scaled):,}")
-print(f"Number of classes: {len(np.unique(y))}")
-print("\nComputation Times:")
-print(f"  UMAP Library:     {duration_lib:.2f} seconds")
-print(f"  Custom UMAP:      {duration_custom:.2f} seconds")
-print(f"  Speed ratio:      {duration_custom/duration_lib:.2f}x")
-print("\nUMAP Library Embedding Range:")
-print(f"  X=[{embedding_lib[:, 0].min():.2f}, {embedding_lib[:, 0].max():.2f}], "
-      f"Y=[{embedding_lib[:, 1].min():.2f}, {embedding_lib[:, 1].max():.2f}]")
-print("\nCustom UMAP Embedding Range:")
-print(f"  X=[{embedding_custom[:, 0].min():.2f}, {embedding_custom[:, 0].max():.2f}], "
-      f"Y=[{embedding_custom[:, 1].min():.2f}, {embedding_custom[:, 1].max():.2f}]")
-print("="*70)
+output_path = os.path.j

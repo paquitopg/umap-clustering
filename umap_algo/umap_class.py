@@ -1,9 +1,11 @@
 # Data Structure
 import pandas as pd
 import numpy as np
+import scipy.sparse as sp
 
 # Plot
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation, PillowWriter
 
 # Utils
 from sklearn.decomposition import PCA
@@ -13,13 +15,12 @@ from scipy.optimize import root_scalar, curve_fit
 from sklearn.preprocessing import StandardScaler
 
 class umap_mapping:
-    def __init__(self, n_neighbors=15, n_components=2, min_dist=0.1, KNN_metric = 'euclidean', KNN_method='exact', random_state=42):
+    def __init__(self, n_neighbors=15, n_components=2, min_dist=0.1, KNN_metric = 'euclidean', KNN_method='exact'):
         self.n_neighbors = n_neighbors
         self.n_components = n_components
         self.min_dist = min_dist
         self.metric = KNN_metric
         self.KNN_method = KNN_method
-        self.random_state = random_state
 
         # Taking default values for a and b, replaced later by fitting
         self.a = 1.9
@@ -34,20 +35,30 @@ class umap_mapping:
         X: array-like, shape (n_samples, n_features)
         
         Returns:
-        KNN_graph: adjacency list of length n_samples, each element is a tuple (index in X, distance)
+        distance_matrix: sparse matrix, shape (n_samples, n_samples) - distance matrix of the KNN graph
         ---------
         """
         K = self.n_neighbors
 
         if self.KNN_method == 'exact':
             indices, distances = exact_knn_all_points(X, k=K, metric=self.metric)
-            return [[indices[i], distances[i]] for i in range(len(X))]
-        else :
+
+        else: # approximate KNN
             indices, distances = approx_knn_all_points(X, k=K, metric=self.metric)
-            return [[indices[i], distances[i]] for i in range(len(X))]
+
+        # Build distance matrix
+
+        n_samples = len(X)
+        distance_matrix = sp.csr_matrix((n_samples, n_samples))
+
+        for i in range(n_samples):
+            for j in indices[i]:
+                distance_matrix[i, j] = distances[i][np.where(indices[i] == j)[0][0]]
+
+        return distance_matrix
         
 
-    def rho_sigma(self, KNN_graph):
+    def rho_sigma(self, distance_matrix):
         """
         Compute rho and sigma for each point in the KNN graph.
         For each point i, rho_i is the distance to the closest neighbor (non-zero),
@@ -55,20 +66,23 @@ class umap_mapping:
         
         ---------
         Inputs:
-        KNN_graph: adjacency list of length n_samples, each element is a tuple (index in X, distance)
+        distance_matrix: sparse matrix, shape (n_samples, n_samples) - distance matrix of the KNN graph
 
         Returns:
         rho: array-like, shape (n_samples,) - the distance to the closest neighbor (non-zero) for each point
         sigma: array-like, shape (n_samples,)
         ---------
         """
-        rho = np.array([min([d for d in KNN_graph[i][1] if d > 0]) for i in range(len(KNN_graph))])
+        
+        rho = distance_matrix.min(axis=1, explicit=True).toarray().flatten()
+
         def func(sigma, distances, rho):
             return sum(np.exp(-(np.maximum(0, distances - rho)) / sigma)) - np.log2(self.n_neighbors)
 
-        sigma = np.ones(len(KNN_graph))
-        for i in range(len(KNN_graph)):
-            distances = KNN_graph[i][1]
+        sigma = np.ones(distance_matrix.shape[0])
+        for i in range(distance_matrix.shape[0]):
+            distances = distance_matrix[i].toarray().flatten()
+            distances = distances[distances > 0]
             rho_i = rho[i]
             sol = root_scalar(func, args=(distances, rho_i), bracket=[1e-5, 1e5], method='bisect')
             sigma[i] = sol.root
@@ -76,61 +90,41 @@ class umap_mapping:
         return rho, sigma
 
 
-    def compute_adjusted_weights(self, KNN_graph, rho, sigma):
+    def compute_adjusted_weights(self, distance_matrix, rho, sigma):
         """
         Compute the adjusted weights for the KNN graph using fuzzy union.
         
         ---------
         Inputs:
-        KNN_graph: adjacency list of length n_samples, each element is a tuple (index in X, distance)
+        distance_matrix: sparse matrix, shape (n_samples, n_samples) - distance matrix of the KNN graph
         rho: array-like, shape (n_samples,) - the distance to the closest neighbor (non-zero) for each point
         sigma: array-like, shape (n_samples,)
 
         Returns:
-        adjusted_weights: array-like, shape (n_samples, n_neighbors)
+        adjusted_weights: sparse matrix, shape (n_samples, n_samples) - adjusted weights of the KNN graph
         ---------
         """
-        n = len(KNN_graph)
 
         # Directional weights
-        weights = []
-        for i in range(n):
-            distances = np.array(KNN_graph[i][1])
-            w = np.exp(-(np.maximum(0, distances - rho[i])) / sigma[i])
-            weights.append(w)
+        weights = distance_matrix.copy()
 
+        for i in range(weights.shape[0]):   #Compute the weights according to UMAP formula and keeping low memory usage
+            row_slice = slice(weights.indptr[i], weights.indptr[i+1])
+            weights.data[row_slice] = np.exp(-(np.maximum(0, weights.data[row_slice] - rho[i])) / sigma[i])
+
+      
         # Symmetric weights (fuzzy union)
-        adjusted_weights = [w.copy() for w in weights]
-
-        for i in range(n):
-            neighbors_i = KNN_graph[i][0]
-
-            for idx_i, j in enumerate(neighbors_i):
-                w_ij = weights[i][idx_i]
-
-                # Checking if i and j are mutual neighbors
-                neighbors_j = KNN_graph[j][0]
-
-                if i in neighbors_j:
-                    idx_j = np.where(neighbors_j == i)[0][0]
-                    w_ji = weights[j][idx_j]
-                else:
-                    w_ji = 0.0
-
-                # Fuzzy union
-                adjusted_weights[i][idx_i] = w_ij + w_ji - w_ij * w_ji
-
-        return np.array(adjusted_weights)
+        return weights + weights.T - weights.multiply(weights.T)
 
 
     def attractive_force(self, y_i, y_j, weight_ij): # See Part 3.2 https://arxiv.org/pdf/1802.03426
-        return (-2*self.a*self.b*np.linalg.norm(y_i - y_j)**(2 * self.b - 2))/(1 + np.linalg.norm(y_i - y_j) ** 2) * (y_i - y_j) * weight_ij
+        return (-2*self.a*self.b*np.linalg.norm(y_i - y_j)**(2 * self.b - 2))/(1 + self.a * np.linalg.norm(y_i - y_j) ** (2*self.b)) * (y_i - y_j) * weight_ij
 
     
     def repulsive_force(self, y_i, y_j, weight_ij, epsilon=1e-3): #See Part 3.2 https://arxiv.org/pdf/1802.03426
         return (2*self.b) / ( (epsilon + np.linalg.norm(y_i - y_j)**2)*(1 + self.a*np.linalg.norm(y_i - y_j)**(2*self.b))) * (1-weight_ij) * (y_i - y_j)
     
-    def find_ab_params(self, KNN_graph):
+    def find_ab_params(self, distance_matrix):
         """
         Fit the parameters a and b for the UMAP attractive and repulsive forces by 
         non-linear least squares fitting against the curve.
@@ -138,7 +132,7 @@ class umap_mapping:
 
         ---------
         Inputs:
-        KNN_graph: adjacency list of length n_samples, each element is a tuple (index in X, distance)
+        distance_matrix: sparse matrix, shape (n_samples, n_samples) - distance matrix of the KNN graph
 
         Returns:
         a, b: float - parameters for the attractive and repulsive forces
@@ -147,47 +141,36 @@ class umap_mapping:
         def curve(d, a, b):
             return 1 / (1 + a * d ** (2 * b))
 
-        d = np.array([x[1] for x in KNN_graph]).flatten()  # distances to neighbors
+        d = distance_matrix.data.astype(np.float64)
+
         psi = np.where(d <= self.min_dist, 1.0, np.exp(-(d - self.min_dist)))
         
         (a, b), _ = curve_fit(curve, d, psi)
 
         return a, b
 
+    def spectral_embedding(self, weights):
 
-    def PCA_embedding(self, X):
-        return PCA(n_components=self.n_components, random_state=self.random_state).fit_transform(X)
+        deg = np.asarray(weights.sum(axis=1)).ravel()
 
-    def random_embedding(self, n_samples):
-        np.random.seed(self.random_state)
-        return np.random.randn(n_samples, self.n_components)
+        D = sp.diags(deg)
+        D_inv_sqrt = sp.diags(1/np.sqrt(deg))
 
-    def spectral_embedding(self, KNN_graph, weights):
-        n_samples = len(KNN_graph)
-        A = np.zeros((n_samples, n_samples))
+        L = D_inv_sqrt.dot(D - weights).dot(D_inv_sqrt)
 
-        for i in range(n_samples):
-            neighbors = KNN_graph[i][0]
-            for idx, j in enumerate(neighbors):
-                A[i, j] = weights[i][idx]
-
-        D = np.diag(A.sum(axis=1))
-        L = D**0.5 @ (D - A) @ D**0.5
-
-        eigvals, eigvecs = np.linalg.eigh(L)
+        eigvals, eigvecs = sp.linalg.eigsh(L, k=self.n_components + 1, which='SM')
 
         return eigvecs[:, 1:self.n_components+1]
 
 
-    def optimize(self, Y, KNN_graph, weights, n_epochs=200, learning_rate=1):
+    def optimize(self, Y, weights, n_epochs=200, learning_rate=0.01):
         """
         Optimize the low-dimensional embedding Y using stochastic gradient descent.
 
         ---------
         Inputs:
         Y: array-like, shape (n_samples, n_components) - initial embedding
-        KNN_graph: adjacency list of length n_samples, each element is a tuple (indexes in X, distances)
-        weights: array-like, shape (n_samples, n_neighbors) - adjusted weights
+        weights: sparse matrix, shape (n_samples, n_samples) - adjusted weights of the KNN graph
         a, b: float - parameters for the attractive and repulsive forces
         n_epochs: int - number of epochs for optimization
         learning_rate: float - initial learning rate for optimization
@@ -200,41 +183,151 @@ class umap_mapping:
         n_samples = Y.shape[0]
         n_neg = 5
 
+        # For faster computations
+        indptr = weights.indptr
+        indices = weights.indices
+        data = weights.data
+
         for epoch in range(n_epochs):
             for i in range(n_samples):
-                for idx, j in enumerate(KNN_graph[i][0]):
-                    if i == j:
+                yi = Y[i]
+
+                row_start = indptr[i]
+                row_end = indptr[i + 1]
+
+                # Attractive forces
+                for idx in range(row_start, row_end):
+                    j = indices[idx]
+                    if j == i:
                         continue
 
-                    w_ij = weights[i][idx]
+                    w_ij = data[idx]
 
-                    if np.random.rand() > w_ij:
+                    if np.random.random() > w_ij:
                         continue
 
-                    grad_attr = self.attractive_force(Y[i], Y[j], w_ij)
+                    grad = self.attractive_force(yi, Y[j], w_ij)
+                    yi += learning_rate * grad
 
-                    Y[i] += learning_rate * grad_attr
-
+                # Negative sampling
                 for _ in range(n_neg):
                     k = np.random.randint(0, n_samples)
                     if k == i:
                         continue
-                    
-                    # Search if k is in the neighbors of i
+
                     w_ik = 0.0
-                    if k in KNN_graph[i][0]:
-                        idx_k = np.where(KNN_graph[i][0] == k)[0][0]
-                        w_ik = weights[i][idx_k]
+                    if k in indices[row_start:row_end]:
+                        k_idx = np.where(indices[row_start:row_end] == k)[0][0] + row_start
+                        w_ik = data[k_idx]
 
-                    grad_rep = self.repulsive_force(Y[i], Y[k], w_ik)
-                    Y[i] += learning_rate * grad_rep
+                    grad = self.repulsive_force(yi, Y[k], w_ik)
+                    yi += learning_rate * grad
 
+                Y[i] = yi
 
-            learning_rate -= epoch / n_epochs * learning_rate
+            learning_rate -= 1 / n_epochs * learning_rate
 
         return Y
+    
+    def optimize_generator(self, Y, weights, n_epochs=200, learning_rate=0.01):
+        """
+        Generator version of the optimize function to create animations.
+        """
 
-    def fit_transform(self, X, n_epochs=200):
+        n_samples = Y.shape[0]
+        n_neg = 5
+
+        indptr = weights.indptr
+        indices = weights.indices
+        data = weights.data
+
+        for epoch in range(n_epochs):
+            for i in range(n_samples):
+                yi = Y[i]
+
+                row_start = indptr[i]
+                row_end = indptr[i + 1]
+
+                # Attractive forces
+                for idx in range(row_start, row_end):
+                    j = indices[idx]
+                    if j == i:
+                        continue
+
+                    w_ij = data[idx]
+
+                    if np.random.random() > w_ij:
+                        continue
+
+                    grad = self.attractive_force(yi, Y[j], w_ij)
+                    yi += learning_rate * grad
+
+                # Negative sampling
+                for _ in range(n_neg):
+                    k = np.random.randint(0, n_samples)
+                    if k == i:
+                        continue
+
+                    grad = self.repulsive_force(yi, Y[k], 0.0)
+                    yi += learning_rate * grad
+
+                Y[i] = yi
+
+            learning_rate *= (1.0 - 1.0 / n_epochs)
+
+            yield Y, epoch
+
+    
+    def animate_optimization(self, Y_init, weights, labels=None,n_epochs=200, learning_rate=0.01):
+        """
+        Only for 2D embeddings.
+        Create an animation of the optimization process.
+        """
+
+        Y = Y_init.copy()
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+
+        # For the Iris case, need to broaden the window compared to the initial embedding limits
+        x_min, x_max = -4, 4
+        y_min, y_max = -4, 4
+
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+
+        if labels is None:
+            scat = ax.scatter(Y[:, 0], Y[:, 1], s=20)
+        else:
+            scat = ax.scatter(Y[:, 0], Y[:, 1], c=labels, cmap="viridis", s=20)
+
+        ax.set_title("UMAP optimization - epoch 0")
+
+        def update(frame):
+            Y_current, epoch = frame
+            scat.set_offsets(Y_current)
+            ax.set_title(f"UMAP optimization - epoch {epoch}")
+            return scat,
+
+        generator = self.optimize_generator(
+            Y, weights,
+            n_epochs=n_epochs,
+            learning_rate=learning_rate
+        )
+
+        anim = FuncAnimation(
+            fig,
+            update,
+            frames=generator,
+            interval=100,
+            blit=False,
+            repeat=False
+        )
+
+        plt.show()
+
+        return anim
+
+    def fit_transform(self, X, n_epochs=200, animation=False, labels=None):
         """
         Fit the UMAP model to the data X and transform it into a low-dimensional embedding.
 
@@ -248,37 +341,34 @@ class umap_mapping:
         ---------
         """
         # 1. KNN
-        KNN_graph = self.compute_KNN_graph(X)
+        distance_matrix = self.compute_KNN_graph(X)
 
         # 2. rho & sigma
-        rho, sigma = self.rho_sigma(KNN_graph)
+        rho, sigma = self.rho_sigma(distance_matrix)
 
         # 3. poids symétrisés
-        weights = self.compute_adjusted_weights(KNN_graph, rho, sigma)
+        weights = self.compute_adjusted_weights(distance_matrix, rho, sigma)
 
-        # 4. paramètres a, b
-        self.a, self.b = self.find_ab_params(KNN_graph)
+        # 4. a and b
+        self.a, self.b = self.find_ab_params(distance_matrix)
 
         # 5. init embedding
-        Y = self.spectral_embedding(KNN_graph, weights)
+        Y = self.spectral_embedding(weights)
+
+        if self.n_components == 2:
+            plt.scatter(Y[:, 0], Y[:, 1], c=labels)
+            plt.title("Spectral Embedding of the Dataset")
+            plt.show()
 
         # 6. optimisation
-        Y = self.optimize(Y, KNN_graph, weights, n_epochs=n_epochs)
+        if animation and self.n_components == 2:
+            self.animate_optimization(Y, weights, n_epochs=n_epochs, labels=labels)
+        else:
+            Y = self.optimize(Y, weights, n_epochs=n_epochs)
+
+            if self.n_components == 2:
+                plt.scatter(Y[:, 0], Y[:, 1], c=labels)
+                plt.title("UMAP Embedding of the Dataset")
+                plt.show()
 
         return Y
-
-if __name__ == "__main__":
-    # Exemple d'utilisation
-    from sklearn.datasets import load_iris
-
-    data = load_iris()
-    X = data.data
-    scaler = StandardScaler()
-    X = scaler.fit_transform(X)
-
-    umap = umap_mapping(n_neighbors=10, n_components=2, min_dist=0.1, random_state=42)
-    Y = umap.fit_transform(X, n_epochs=500)
-
-    plt.scatter(Y[:, 0], Y[:, 1], c=data.target)
-    plt.title("UMAP Embedding of Iris Dataset")
-    plt.show()

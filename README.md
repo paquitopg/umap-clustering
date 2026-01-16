@@ -1,37 +1,110 @@
-# umap-clustering
-Uniform Manifold Approximation and Projection algorithm applied to dimensionality reduction and clustering. 
+# UMAP-clustering
 
-The Uniform Manifold Approximation and Projection (UMAP) algorithm has been introduced by McInnes et al. in 2018 [1] as a nonlinear dimensionality reduction (DR) technique. It builds upon concepts from manifold theory and topological data analysis to produce meaningful low-dimensional representations of high-dimensional data. Compared to earlier methods such as t-SNE, UMAP offers better preservation of global structure, and scalability to large datasets. Beyond visualization,  UMAP has been explored as a tool for tasks such as clustering [2]. 
-For this project, we plan to explore the UMAP algorithm and its application to real datasets. We want to compare its performance to other previous DR techniques such as PCA or the more advanced t-SNE.  
+UMAP-Clustering is a project that applies Uniform Manifold Approximation and Projection (UMAP) — a modern non-linear dimensionality reduction algorithm — to real-world datasets and combines it with clustering techniques to uncover structure in high-dimensional data.
 
-
-Datasets
-
-We plan to use 3 datasets that have different dimensions but are all based on geographical data:
-Socio-economic and health description of countries [3]: 9 dimensions, geographical coordinates may be added if needed.
-NYC Yellow Taxi Trip Data [4]: 18 dimensions
-100 French cities indicators (economics, health, risk factors, nature, culture) [5]: 54 columns. Using geographical coordinates for the whole country or regions is possible thanks to French public data [6].
-
-We would use them this way:
-Apply UMAP (vs. other dimensionality reduction algorithms) on the data.
-Run basic clustering algorithms (e.g., KNN, DBSCAN) with different parameters.
-Use silhouette score (or other clustering metrics if needed) to compare UMAP vs. other dimensionality reduction algorithms.
+UMAP is known for producing meaningful low-dimensional embeddings that preserve local and some global structure of the original data, making it useful not just for visualization but also as a preprocessing step before clustering.
 
 
-References
+## 🚀 Features
 
-[1] McInnes, L, Healy, J, UMAP: Uniform Manifold Approximation and Projection for Dimension Reduction, ArXiv e-prints 1802.03426, 2018
+### 📉 Dimensionality Reduction
+Uses UMAP to reduce high-dimensional data into a lower-dimensional space where structure can be more easily visualized. UMAP algorithm can be taken from this repository or from the library `umap-learn`.
 
-[2] Delahoz-Domínguez, E., Mendoza-Mendoza, A., & Visbal-Cadavid, D. (2025). Clustering of Countries Through UMAP and K-Means: A Multidimensional Analysis of Development, Governance, and Logistics. Logistics, 9(3), 108.
+### 🔍 Clustering Analysis
+Applies clustering algorithms (e.g., K-Means, DBSCAN) on UMAP embeddings to identify meaningful groups in the data.
 
-[3] Unsupervised Learning on Country Data, Kaggle
- https://www.kaggle.com/datasets/rohan0301/unsupervised-learning-on-country-data 
+### 📊 Comparison with Other Techniques
+Enables comparison of UMAP results with classical methods like PCA or t-SNE.
 
-[4] NYC Yellow Taxi Trip Data, Kaggle
-https://www.kaggle.com/datasets/elemento/nyc-yellow-taxi-trip-data
+## 📦 Project Structure
+| Folder              | Description                                                             |
+| ------------------- | ----------------------------------------------------------------------- |
+| `test/`             | Scripts and notebooks for inspecting datasets and testing algorithms.   |
+| `umap_algo/`        | Core UMAP implementation and embedding pipelines.                       |
+| `umap_comparisons/` | Comparisons between UMAP and other dimensionality reduction approaches. |
 
-[5] French cities, Kaggle
-https://www.kaggle.com/datasets/zakariakhodri3/french-cities-2005
+## 🧠 About UMAP
 
-[6] Datagouv geographical data
-https://www.data.gouv.fr/pages/donnees-geographiques 
+UMAP (Uniform Manifold Approximation and Projection) is a method that:
+
+* Constructs a graph of nearest neighbors in high dimension.
+
+* Optimizes a low-dimensional embedding that preserves this structure.
+
+* Is widely used for visualization and as a preprocessing step for clustering and other tasks.
+
+## 📊 Typical Workflow
+
+### 1. Load high-dimensional dataset
+ Prepare your dataset with relevant features.
+
+### 2. Dimensionality Reduction via UMAP
+Reduce to a lower dimension (e.g., 2D or 10D) while preserving structure.
+
+### 3. Apply Clustering
+Run clustering algorithms such as K-Means, DBSCAN, or density-based methods over the UMAP output.
+
+### 4. Evaluate Results
+Use clustering metrics (e.g., silhouette score) to compare and validate performance.
+
+
+## 📌 Example Use
+
+Below is a minimal Python snippet demonstrating how to run UMAP and a basic clustering:
+
+```
+from umap_algo.umap_class import umap_mapping
+
+from sklearn.datasets import load_iris
+from sklearn.preprocessing import StandardScaler
+
+# Load and preprocess the Iris dataset
+data = load_iris()
+X = data.data
+scaler = StandardScaler()
+X = scaler.fit_transform(X)
+
+# Get an animation of the UMAP algorithm
+umap = umap_mapping(n_neighbors=10, n_components=2, min_dist=0.1)
+Y = umap.fit_transform(X, n_epochs=300, animation=True, labels = data.target)
+```
+
+By running this in the main folder, you should get an animation close to this one:
+
+![til](umap_animation_example.gif)
+
+
+## 🔧 Installation
+
+1. Clone the repository:
+```
+git clone https://github.com/paquitopg/umap-clustering.git
+cd umap-clustering
+```
+
+2. Install dependencies:
+```
+pip install -r requirements.txt
+```
+
+3. Start exploring notebooks in `data_exploration/` or run scripts in the main folders.
+
+
+## 📁 Datasets (Planned)
+
+We plan to demonstrate UMAP clustering on the following datasets:
+
+* Socio-economic and health description of countries (~9 dimensions)
+
+* NYC Yellow Taxi Trip Data (~18 dimensions)
+
+* French cities socio-economic indicators (~54 dimensions)
+
+Each dataset showcases challenges like varying dimensions and features.
+
+
+## 📚 References that helped us build our algorithms
+
+1. McInnes, Leland; Healy, John; UMAP: Uniform Manifold Approximation and Projection for Dimension Reduction.
+
+2. Wei, Dong; Charikar, Moses; Kai, Li; Efficient k-nearest neighbor graph constructionfor generic similarity measures.
