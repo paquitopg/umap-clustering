@@ -327,7 +327,7 @@ class umap_mapping:
 
         return anim
 
-    def fit_transform(self, X, n_epochs=200, animation=False, labels=None):
+    def fit_transform(self, X, n_epochs=200, animation=False, labels=None, show_spectral_embedding=False, show_final_embedding=False):
         """
         Fit the UMAP model to the data X and transform it into a low-dimensional embedding.
 
@@ -355,7 +355,7 @@ class umap_mapping:
         # 5. init embedding
         Y = self.spectral_embedding(weights)
 
-        if self.n_components == 2:
+        if self.n_components == 2 and show_spectral_embedding:
             plt.scatter(Y[:, 0], Y[:, 1], c=labels)
             plt.title("Spectral Embedding of the Dataset")
             plt.show()
@@ -366,7 +366,7 @@ class umap_mapping:
         else:
             Y = self.optimize(Y, weights, n_epochs=n_epochs)
 
-            if self.n_components == 2:
+            if self.n_components == 2 and show_final_embedding:
                 plt.scatter(Y[:, 0], Y[:, 1], c=labels)
                 plt.title("UMAP Embedding of the Dataset")
                 plt.show()
