@@ -84,7 +84,7 @@ def NNDescent(V, sigma, K, max_iter=1000):
             indices[v].append(u)
             distances[v].append(d)
 
-    return indices, distances
+    return np.array(indices), np.array(distances)
 
 
 def reverse(B):
